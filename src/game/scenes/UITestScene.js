@@ -31,9 +31,13 @@ export default class UITestScene extends Phaser.Scene {
     this.level = this.score / 100;
     this.lastLevel = this.level;
     this.lives = 3;
+    this.isGameOver = false;
+    this.isRestarting = false;
 
     this.gameplayUI = new GameplayUI(this,0,0);
+    this.gameplayUI.resetGameOverPanel();
     this.conveyer = new Conveyer(this,this.scale.width/2,(this.scale.height/2) - 950);
+    this.physics.resume();
     
     //const _fruit = new Fruit(this, this.scale.width/2, 50);
   }
@@ -82,6 +86,11 @@ export default class UITestScene extends Phaser.Scene {
     }
   }
   onGameOver(){
+    if (this.isGameOver) {
+      return;
+    }
+
+    this.isGameOver = true;
     //this.scene.pause();
     this.physics.pause();
 
@@ -91,16 +100,43 @@ export default class UITestScene extends Phaser.Scene {
     if(this.conveyer){
       this.conveyer.stop();
     }
-    if(this.score > StorageManager.get('highscore')){
-      db.createRow('attention-sorting-game',
-          {score: this.score, highscore: this.score, playtime: 0, UID: "9bd1626d-8073-4c49-9564-7fab36f88c6e"}).then(r => {
-        console.log(`Return ID : ${r}`);
-      })
+    const storedHighScore = StorageManager.get('highscore', 0);
 
-      StorageManager.save('highscore',this.score);
+    if(this.score > storedHighScore){
+      db.submitHighScore(this.score, 0)
+        .then((record) => {
+          if (this.isRestarting || !this.sys.isActive()) {
+            return;
+          }
+
+          console.log(`Saved high score ID: ${record.id}`);
+          StorageManager.save('highscore', this.score);
+          this.gameplayUI.setGameOverHighscore(this.score);
+        })
+        .catch((error) => {
+          console.error("Failed to save high score:", error);
+        });
     }
     this.gameplayUI.showGameOverPanel(this.score);
     //console.log("Highscore: " + StorageManager.get('highscore'));
+  }
+  restartGame(){
+    if (this.isRestarting) {
+      return;
+    }
+
+    this.isRestarting = true;
+    this.isGameOver = false;
+
+    if (this.gameplayUI) {
+      this.gameplayUI.resetGameOverPanel();
+    }
+
+    if (this.conveyer && this.conveyer.spawnTimer) {
+      this.conveyer.spawnTimer.remove(false);
+    }
+
+    this.scene.restart();
   }
   
 }
