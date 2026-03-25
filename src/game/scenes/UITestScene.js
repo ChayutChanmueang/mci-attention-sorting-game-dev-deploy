@@ -4,6 +4,8 @@ import GameplayUI from "../entity/script/ui/gameplay-ui";
 import StorageManager from "../../core/storage-manager";
 import db from "../../core/database.js";
 
+const GAME_ID = "ATTN001";
+
 export default class UITestScene extends Phaser.Scene {
   constructor() {
     super("ui-test-scene");
@@ -33,14 +35,15 @@ export default class UITestScene extends Phaser.Scene {
     this.lives = 3;
     this.isGameOver = false;
     this.isRestarting = false;
+    this.gameStartedAt = new Date();
 
     this.gameplayUI = new GameplayUI(this,0,0);
     this.gameplayUI.resetGameOverPanel();
-    const _conveyerNums = data.conveyerNums || 3;
+    this.conveyerNums = data.conveyerNums || 3;
     this.currentConeyer = 0;
     this.conveyers = [];
-    while(this.conveyers.length < _conveyerNums){
-      this.conveyers[this.currentConeyer] = new Conveyer(this,this.scale.width * ((1 + this.currentConeyer)/(_conveyerNums+1)),(this.scale.height/2) - 950,150,2.15);
+    while(this.conveyers.length < this.conveyerNums){
+      this.conveyers[this.currentConeyer] = new Conveyer(this,this.scale.width * ((1 + this.currentConeyer)/(this.conveyerNums+1)),(this.scale.height/2) - 950,150,2.15);
       this.currentConeyer++;
     }
 
@@ -120,22 +123,31 @@ export default class UITestScene extends Phaser.Scene {
       this.spawnFruitTimer = undefined;
     }
     const storedHighScore = StorageManager.get('highscore', 0);
+    const endedAt = new Date();
 
-    if(this.score > storedHighScore){
-      db.submitHighScore(this.score, 0)
-        .then((record) => {
-          if (this.isRestarting || !this.sys.isActive()) {
-            return;
-          }
+    db.submitGameData({
+      gid: GAME_ID,
+      score: this.score,
+      level: this.conveyerNums,
+      startedAt: this.gameStartedAt,
+      endedAt,
+    })
+      .then(() => {
+        if (this.isRestarting || !this.sys.isActive()) {
+          return;
+        }
 
-          console.log(`Saved high score ID: ${record.id}`);
+        console.log("Saved game data to Supabase");
+
+        if(this.score > storedHighScore){
           StorageManager.save('highscore', this.score);
           this.gameplayUI.setGameOverHighscore(this.score);
-        })
-        .catch((error) => {
-          console.error("Failed to save high score:", error);
-        });
-    }
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to save game data:", error);
+      });
+
     this.gameplayUI.showGameOverPanel(this.score);
     //console.log("Highscore: " + StorageManager.get('highscore'));
   }
